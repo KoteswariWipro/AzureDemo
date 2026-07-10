@@ -90,6 +90,6 @@ stages:
 
               resourceGroupName: 'WP_SL_User_172'
 
-              slotName: 'staging-qa'
+              slotName: 'stageing-qa'
 
               package: '$(Pipeline.Workspace)/drop/**/*.zip'
