@@ -6,34 +6,90 @@
 trigger:
 - main
 
-pool:
-  vmImage: ubuntu-latest
+variables:
+  buildConfiguration: 'Release'
 
-steps:
-- task: DotNetCoreCLI@2
-  inputs:
-    command: 'restore'
-    projects: '**/*.csproj'
+stages:
 
-- task: DotNetCoreCLI@2
-  inputs:
-    command: 'build'
-    projects: '**/*.csproj'
-    arguments: '--configuration Release'
+# =============================
+# BUILD
+# =============================
+- stage: Build
+  displayName: Build Application
 
-- task: DotNetCoreCLI@2
-  inputs:
-    command: 'test'
-    projects: '**/*Tests.csproj'
-    arguments: '--configuration Release'
+  jobs:
+  - job: BuildJob
 
-- task: DotNetCoreCLI@2
-  inputs:
-    command: 'publish'
-    projects: '**/*.csproj'
-    arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
+    steps:
 
-- task: PublishBuildArtifacts@1
-  inputs:
-    pathToPublish: '$(Build.ArtifactStagingDirectory)'
-    artifactName: 'drop'
+    - task: UseDotNet@2
+      inputs:
+        packageType: sdk
+        version: '8.x'
+
+    - task: DotNetCoreCLI@2
+      displayName: Restore
+      inputs:
+        command: restore
+        projects: '**/*.csproj'
+
+    - task: DotNetCoreCLI@2
+      displayName: Build
+      inputs:
+        command: build
+        projects: '**/*.csproj'
+        arguments: '--configuration Release'
+
+    - task: DotNetCoreCLI@2
+      displayName: Publish
+      inputs:
+        command: publish
+        publishWebProjects: true
+        arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
+        zipAfterPublish: true
+
+    - publish: $(Build.ArtifactStagingDirectory)
+      artifact: drop
+
+
+
+# =============================
+# QA DEPLOYMENT
+# =============================
+- stage: DeployQA
+
+  displayName: Deploy to QA
+
+  dependsOn: Build
+
+  jobs:
+
+  - deployment: QADeploy
+
+    environment: QA
+
+    strategy:
+      runOnce:
+
+        deploy:
+
+          steps:
+
+          - download: current
+            artifact: drop
+
+          - task: AzureWebApp@1
+
+            inputs:
+
+              azureSubscription: 'My-service-connection'
+              appType: 'webApp'
+              appName: 'acsazuredevopsdemologicapp'
+
+              deployToSlotOrASE: true
+
+              resourceGroupName: 'WP_SL_User_172'
+
+              slotName: 'staging-qa'
+
+              package: '$(Pipeline.Workspace)/drop/**/*.zip'
