@@ -1,95 +1,78 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
 - main
 
-variables:
-  buildConfiguration: 'Release'
+pool:
+  vmImage: ubuntu-latest
 
 stages:
 
-# =============================
-# BUILD
-# =============================
+#  1. BUILD + TEST STAGE
 - stage: Build
-  displayName: Build Application
-
+  displayName: "Build and Test"
   jobs:
   - job: BuildJob
-
     steps:
 
-    - task: UseDotNet@2
-      inputs:
-        packageType: sdk
-        version: '8.x'
-
     - task: DotNetCoreCLI@2
-      displayName: Restore
       inputs:
-        command: restore
+        command: 'restore'
         projects: '**/*.csproj'
 
     - task: DotNetCoreCLI@2
-      displayName: Build
       inputs:
-        command: build
+        command: 'build'
         projects: '**/*.csproj'
         arguments: '--configuration Release'
 
     - task: DotNetCoreCLI@2
-      displayName: Publish
       inputs:
-        command: publish
-        publishWebProjects: true
+        command: 'test'
+        projects: '**/*Tests.csproj'
+        arguments: '--configuration Release'
+
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'publish'
+        projects: '**/*.csproj'
         arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
-        zipAfterPublish: true
 
-    - publish: $(Build.ArtifactStagingDirectory)
-      artifact: drop
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: 'drop'
 
-
-
-# =============================
-# QA DEPLOYMENT
-# =============================
-- stage: DeployQA
-
-  displayName: Deploy to QA
-
+#  2. DEPLOY TO DEV
+- stage: Deploy_Dev
   dependsOn: Build
-
   jobs:
-
-  - deployment: QADeploy
-
-    environment: QA
-
+  - deployment: DeployDev
+    environment: 'Dev'
     strategy:
       runOnce:
-
         deploy:
-
           steps:
+          - script: echo "Deploying to Dev"
 
-          - download: current
-            artifact: drop
+#  3. DEPLOY TO QA
+- stage: Deploy_QA
+  dependsOn: Deploy_Dev
+  jobs:
+  - deployment: DeployQA
+    environment: 'QA'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - script: echo "Deploying to QA"
 
-          - task: AzureWebApp@1
-
-            inputs:
-
-              azureSubscription: 'My-service-connection'
-              appType: 'webApp'
-              appName: 'acsazuredevopsdemologicapp'
-
-              deployToSlotOrASE: true
-
-              resourceGroupName: 'WP_SL_User_172'
-
-              slotName: 'stageing-qa'
-
-              package: '$(Pipeline.Workspace)/drop/**/*.zip'
+#  4. DEPLOY TO PROD
+- stage: Deploy_Prod
+  dependsOn: Deploy_QA
+  jobs:
+  - deployment: DeployProd
+    environment: 'Prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - script: echo "Deploying to Prod"
